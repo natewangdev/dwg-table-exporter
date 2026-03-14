@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
+import re
 
 import ezdxf
 from ezdxf.addons import odafc
@@ -62,13 +63,63 @@ def read_tables_from_dxf(path: Path) -> List[TableData]:
     for layout in doc.layouts:
         # 在该布局中查找 ACAD_TABLE 实体
         for acad_table in layout.query("ACAD_TABLE"):
-            content = read_acad_table_content(acad_table)
-            # content 是 list[list[str]]，已全部转换为字符串
+            raw_content = read_acad_table_content(acad_table)
+            # raw_content 是 list[list[str]]，其中字符串可能包含 MTEXT 格式代码
 
-            # 表名：优先用布局名 + 编号
+            cleaned_rows = [[_clean_cell_text(cell) for cell in row] for row in raw_content]
+
             index = len(tables) + 1
-            table_name = f"{layout.name}_Table{index}"
-            tables.append(TableData(name=table_name, rows=content))
+            title, data_rows = _split_title_and_data(cleaned_rows, layout.name, index)
+            tables.append(TableData(name=title, rows=data_rows))
 
     return tables
+
+
+_MTEXT_FONT_PATTERN = re.compile(r"{\\f[^;]*;")
+_MTEXT_CTRL_PATTERN = re.compile(r"\\[A-Za-z]+(?:[0-9.-]+)?")
+
+
+def _clean_cell_text(value: str) -> str:
+    """去掉 MTEXT 格式控制，只保留可读文本."""
+    if not value:
+        return ""
+
+    text = str(value)
+
+    # 处理换行符
+    text = text.replace("\\P", "\n").replace("\\n", "\n")
+
+    # 去掉字体格式前缀，如 {\fSimSun|b0|i0|c134|p2;
+    text = _MTEXT_FONT_PATTERN.sub("", text)
+
+    # 去掉控制序列，如 \L \l \H1.0; 等
+    text = _MTEXT_CTRL_PATTERN.sub("", text)
+
+    # 去掉多余的大括号
+    text = text.replace("{", "").replace("}", "")
+
+    return text.strip()
+
+
+def _split_title_and_data(rows: List[List[str]], layout_name: str, index: int) -> tuple[str, List[List[str]]]:
+    """从表格内容中拆分“标题行”和“数据行”.
+
+    约定：
+    - 如果第一行有非空单元格，则认为是表格标题，该行不写入 Excel，只用于 sheet 名。
+    - 否则使用布局名+序号作为 sheet 名，整表写入 Excel。
+    """
+    if not rows:
+        return f"{layout_name}_Table{index}", []
+
+    first_row = rows[0]
+    non_empty = [cell.strip() for cell in first_row if cell and cell.strip()]
+
+    if non_empty:
+        title = non_empty[0]
+        data_rows = rows[1:]
+    else:
+        title = f"{layout_name}_Table{index}"
+        data_rows = rows
+
+    return title, data_rows
 
