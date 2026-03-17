@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterable
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Border, Side
 
 from .dxf_reader import TableData
 
@@ -16,6 +16,8 @@ def tables_to_workbook(tables: Iterable[TableData]) -> Workbook:
     wb.remove(default_sheet)
 
     used_titles: set[str] = set()
+    thin_side = Side(style="thin")
+    thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
     for index, table in enumerate(tables, start=1):
         title = table.name or f"Table{index}"
@@ -37,7 +39,8 @@ def tables_to_workbook(tables: Iterable[TableData]) -> Workbook:
         ws = wb.create_sheet(title=safe_title)
         for r_idx, row in enumerate(table.rows, start=1):
             for c_idx, value in enumerate(row, start=1):
-                ws.cell(row=r_idx, column=c_idx, value=value)
+                cell = ws.cell(row=r_idx, column=c_idx, value=value)
+                cell.border = thin_border
 
         # 应用合并单元格（0-based -> 1-based）
         for r1, c1, r2, c2 in getattr(table, "merges", []) or []:
@@ -52,6 +55,7 @@ def tables_to_workbook(tables: Iterable[TableData]) -> Workbook:
             # 合并单元格的样式以左上角单元格为准，这里将其设置为水平/垂直居中
             cell = ws.cell(row=r1 + 1, column=c1 + 1)
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = thin_border
 
     # 如果没有任何表格，保留一个空 sheet，避免保存失败
     if not wb.sheetnames:
