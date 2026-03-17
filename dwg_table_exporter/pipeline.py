@@ -16,7 +16,13 @@ def process_single_dxf(config: ExportConfig, dxf_path: Path) -> Path | None:
         # 暂时允许没有表格时跳过，也可以选择仍然导出一个空 Excel
         return None
 
-    wb = tables_to_workbook(tables)
+    wb = tables_to_workbook(
+        tables,
+        autosize=config.autosize,
+        min_col_width=config.min_col_width,
+        max_col_width=config.max_col_width,
+        base_row_height=config.base_row_height,
+    )
     excel_path = save_workbook_for_dxf(config.output_dir, dxf_path, wb, overwrite=config.overwrite)
     return excel_path
 
