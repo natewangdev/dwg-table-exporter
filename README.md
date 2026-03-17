@@ -17,7 +17,12 @@ dwg-table-exporter
 
 - `main.py`：命令行入口
 - `dwg_table_exporter/config.py`：导出配置
-- `dwg_table_exporter/dxf_reader.py`：DWG/DXF 读取与表格解析
+- `dwg_table_exporter/dxf_reader.py`：对外门面（查找文件、读取表格）
+- `dwg_table_exporter/io_loader.py`：DWG/DXF 加载（含 ODAFileConverter）
+- `dwg_table_exporter/text_clean.py`：单元格文本清洗（去 MTEXT 格式码）
+- `dwg_table_exporter/title_rules.py`：标题/表头判定规则
+- `dwg_table_exporter/acad_table_reader.py`：标准 `ACAD_TABLE` 解析
+- `dwg_table_exporter/drawn_table_reader.py`：线段+文字表格解析（含合并单元格）
 - `dwg_table_exporter/excel_writer.py`：Excel 写入
 - `dwg_table_exporter/pipeline.py`：批量处理流程
 - `requirements.txt`：Python 依赖
