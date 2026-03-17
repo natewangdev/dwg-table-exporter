@@ -14,6 +14,8 @@ def tables_to_workbook(tables: Iterable[TableData]) -> Workbook:
     default_sheet = wb.active
     wb.remove(default_sheet)
 
+    used_titles: set[str] = set()
+
     for index, table in enumerate(tables, start=1):
         title = table.name or f"Table{index}"
         # Excel sheet 名长度和字符有限制，这里做一个简单清洗
@@ -22,6 +24,14 @@ def tables_to_workbook(tables: Iterable[TableData]) -> Workbook:
             safe_title = f"Table{index}"
         if len(safe_title) > 31:
             safe_title = safe_title[:31]
+
+        base = safe_title
+        suffix = 1
+        while safe_title in used_titles:
+            suffix += 1
+            candidate = f"{base}_{suffix}"
+            safe_title = candidate[:31]
+        used_titles.add(safe_title)
 
         ws = wb.create_sheet(title=safe_title)
         for r_idx, row in enumerate(table.rows, start=1):
