@@ -58,11 +58,12 @@ def read_tables_from_dxf(path: Path) -> List[TableData]:
 
             index = len(tables) + 1
             title, data_rows = _split_title_and_data(cleaned_rows, layout.name, index)
-            tables.append(TableData(name=title, rows=data_rows))
+            if _has_any_content(data_rows):
+                tables.append(TableData(name=title, rows=data_rows))
 
         # 如果没有标准 TABLE，也尝试解析“线段+文字”表格
         drawn_tables = _read_drawn_tables_from_layout(layout, layout_name=layout.name, start_index=len(tables) + 1)
-        tables.extend(drawn_tables)
+        tables.extend([t for t in drawn_tables if _has_any_content(t.rows)])
 
     return tables
 
@@ -106,8 +107,8 @@ def _split_title_and_data(rows: List[List[str]], layout_name: str, index: int) -
     first_row = rows[0]
     non_empty = [cell.strip() for cell in first_row if cell and cell.strip()]
 
-    # 更保守：只有“首行仅 1 个非空单元格”才认为是标题行（避免把表头当标题）
-    if len(non_empty) == 1:
+    # 更保守：只有“首行仅 1 个非空单元格”且下一行更像表头时才认为是标题行
+    if len(non_empty) == 1 and _looks_like_header_row(rows[1] if len(rows) > 1 else []):
         title = non_empty[0]
         data_rows = rows[1:]
     else:
@@ -115,6 +116,24 @@ def _split_title_and_data(rows: List[List[str]], layout_name: str, index: int) -
         data_rows = rows
 
     return title, data_rows
+
+
+def _looks_like_header_row(row: List[str]) -> bool:
+    """判断一行是否更像“表头/字段名行”。
+
+    经验规则：至少 2 个非空单元格（避免把图纸总标题误判为表格标题）。
+    """
+    non_empty = [c.strip() for c in row if c and c.strip()]
+    return len(non_empty) >= 2
+
+
+def _has_any_content(rows: List[List[str]]) -> bool:
+    """判断表格是否有任何非空内容（用于过滤空表）."""
+    for row in rows:
+        for cell in row:
+            if cell and str(cell).strip():
+                return True
+    return False
 
 
 # -----------------------------
@@ -152,6 +171,10 @@ def _read_drawn_tables_from_layout(layout, layout_name: str, start_index: int) -
         if xs is None or ys is None:
             continue
 
+        # 过滤：仅 1×1 网格（常见于图框/标题栏矩形）直接跳过
+        if (len(xs) - 1) == 1 and (len(ys) - 1) == 1:
+            continue
+
         bbox = _bbox_from_lines(xs, ys)
         grid = _build_grid(cluster, xs, ys)
         rows = _fill_cells_from_text(layout, xs, ys, bbox)
@@ -159,6 +182,12 @@ def _read_drawn_tables_from_layout(layout, layout_name: str, start_index: int) -
             continue
 
         merges, normalized_rows = _apply_merges_for_drawn_table(rows, grid)
+
+        # 过滤：只有 1 个非空单元格的“表格”（容易把图纸总标题误识别成表格）
+        non_empty_cells = sum(1 for row in normalized_rows for cell in row if cell and cell.strip())
+        if non_empty_cells < 2:
+            continue
+
         title, data_rows, title_row_offset = _split_title_and_data_drawn_with_offset(
             normalized_rows, layout_name=layout_name, index=next_index
         )
@@ -536,7 +565,7 @@ def _split_title_and_data_drawn_with_offset(
         return f"{layout_name}_Table{index}", [], 0
     first_row = rows[0]
     non_empty = [cell.strip() for cell in first_row if cell and cell.strip()]
-    if len(non_empty) == 1:
+    if len(non_empty) == 1 and _looks_like_header_row(rows[1] if len(rows) > 1 else []):
         return non_empty[0], rows[1:], 1
     return f"{layout_name}_Table{index}", rows, 0
 
