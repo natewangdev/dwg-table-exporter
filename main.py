@@ -41,7 +41,14 @@ from dwg_table_exporter.pipeline import run_pipeline
     show_default=True,
     help="自动调整列宽/行高（按最长文本与换行估算）。",
 )
-def cli(dxf_dir: Path, output_dir: Path, overwrite: bool, recursive: bool, autosize: bool) -> None:
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="只识别/统计，不写出 Excel（用于调试识别效果）。",
+)
+def cli(dxf_dir: Path, output_dir: Path, overwrite: bool, recursive: bool, autosize: bool, dry_run: bool) -> None:
     """批量将 DXF 中的表格导出为 Excel."""
     config = ExportConfig(
         dxf_dir=dxf_dir,
@@ -49,6 +56,7 @@ def cli(dxf_dir: Path, output_dir: Path, overwrite: bool, recursive: bool, autos
         overwrite=overwrite,
         recursive=recursive,
         autosize=autosize,
+        dry_run=dry_run,
     )
     run_pipeline(config)
 

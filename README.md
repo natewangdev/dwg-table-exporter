@@ -95,6 +95,8 @@ pip install -r requirements.txt
 - `--output-dir`：Excel 输出目录，不存在会自动创建；
 - `--recursive`：递归遍历子目录（可选）；
 - `--overwrite`：若目标 Excel 已存在则覆盖（可选）。
+- `--autosize/--no-autosize`：是否自动调整列宽/行高（默认开启）；
+- `--dry-run`：只识别/统计，不写出 Excel（用于调试识别效果）。
 
 导出规则
 --------
@@ -129,6 +131,16 @@ pip install -r requirements.txt
   - 对“线段+文字”表格：
     - 过滤 1×1 网格（常见图框/标题栏矩形）；
     - 过滤仅 1 个非空单元格的伪表格（常见图纸总标题误识别）。
+
+日志与调试
+---------
+
+- 每个文件处理后都会输出统计信息：
+  - `total`：可导出的表总数
+  - `acad_table`：标准 `ACAD_TABLE` 导出数量
+  - `drawn`：线段+文字表格导出数量
+  - `skipped`：跳过原因计数（如 `empty_table`, `grid_1x1`, `only_one_non_empty_cell`, `no_text_in_grid` 等）
+- 若线段表格解析发生异常，错误信息会包含 `file/layout/bbox/grid` 等上下文，便于定位复现。
 
 已知限制
 --------

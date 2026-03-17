@@ -4,16 +4,21 @@ from pathlib import Path
 from typing import Iterable
 
 from .config import ExportConfig
-from .dxf_reader import TableData, find_dxf_files, read_tables_from_dxf
+from .dxf_reader import TableData, find_dxf_files, read_tables_with_report
 from .excel_writer import save_workbook_for_dxf, tables_to_workbook
+from .reporting import ParseContextError
 
 
 def process_single_dxf(config: ExportConfig, dxf_path: Path) -> Path | None:
-    tables: Iterable[TableData] = read_tables_from_dxf(dxf_path)
-    tables = list(tables)
+    tables, report = read_tables_with_report(dxf_path)
 
     if not tables:
-        # 暂时允许没有表格时跳过，也可以选择仍然导出一个空 Excel
+        _print_report(report)
+        return None
+
+    _print_report(report)
+
+    if config.dry_run:
         return None
 
     wb = tables_to_workbook(
@@ -23,8 +28,7 @@ def process_single_dxf(config: ExportConfig, dxf_path: Path) -> Path | None:
         max_col_width=config.max_col_width,
         base_row_height=config.base_row_height,
     )
-    excel_path = save_workbook_for_dxf(config.output_dir, dxf_path, wb, overwrite=config.overwrite)
-    return excel_path
+    return save_workbook_for_dxf(config.output_dir, dxf_path, wb, overwrite=config.overwrite)
 
 
 def run_pipeline(config: ExportConfig) -> None:
@@ -40,12 +44,27 @@ def run_pipeline(config: ExportConfig) -> None:
         print(f"- 处理: {dxf_path.name}")
         try:
             excel_path = process_single_dxf(config, dxf_path)
+        except ParseContextError as exc:
+            print(f"  [失败] {exc}")
+            continue
         except Exception as exc:  # noqa: BLE001
-            print(f"  [失败] {dxf_path} -> {exc}")
+            print(f"  [失败] file={dxf_path} -> {exc}")
             continue
 
         if excel_path is None:
-            print("  [跳过] 未找到表格数据")
+            if config.dry_run:
+                print("  [完成] dry-run：未写出 Excel")
+            else:
+                print("  [跳过] 未找到可导出的表格数据")
         else:
             print(f"  [完成] 导出为 {excel_path.name}")
+
+
+def _print_report(report) -> None:
+    acad = report.acad_table_exported
+    drawn = report.drawn_table_exported
+    total = report.total_exported
+    skipped = report.skipped
+    skipped_str = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) if skipped else "none"
+    print(f"  [统计] tables: total={total} acad_table={acad} drawn={drawn}; skipped: {skipped_str}")
 

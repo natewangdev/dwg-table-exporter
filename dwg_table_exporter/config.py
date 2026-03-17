@@ -12,6 +12,7 @@ class ExportConfig:
     min_col_width: float = 8.0
     max_col_width: float = 60.0
     base_row_height: float = 15.0
+    dry_run: bool = False
 
     def ensure_dirs(self) -> None:
         self.dxf_dir = self.dxf_dir.resolve()

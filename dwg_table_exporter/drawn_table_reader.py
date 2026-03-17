@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from ezdxf.math import Vec3
 
 from .models import TableData
+from .reporting import LayoutStats, ParseContextError
 from .table_filters import has_any_content
 from .text_clean import clean_cell_text
 from .title_rules import split_title_and_data
@@ -36,7 +37,9 @@ class _Grid:
     h_present: List[List[bool]]  # h_present[k][col] for boundary at ys[k], between col's x-interval
 
 
-def read_drawn_tables_from_layout(layout, *, layout_name: str, start_index: int) -> List[TableData]:
+def read_drawn_tables_from_layout(
+    layout, *, layout_name: str, start_index: int, stats: Optional[LayoutStats] = None, file_path: Optional[str] = None
+) -> List[TableData]:
     segs = _extract_axis_aligned_segments(layout)
     if not segs:
         return []
@@ -46,34 +49,57 @@ def read_drawn_tables_from_layout(layout, *, layout_name: str, start_index: int)
     next_index = start_index
 
     for cluster in clusters:
-        xs, ys = _cluster_grid_lines(cluster)
-        if xs is None or ys is None:
-            continue
+        try:
+            xs, ys = _cluster_grid_lines(cluster)
+            if xs is None or ys is None:
+                continue
 
-        # 过滤：仅 1×1 网格（常见于图框/标题栏矩形）直接跳过
-        if (len(xs) - 1) == 1 and (len(ys) - 1) == 1:
-            continue
+            if stats:
+                stats.drawn_table_candidates += 1
 
-        bbox = _bbox_from_lines(xs, ys)
-        grid = _build_grid(cluster, xs, ys)
-        rows = _fill_cells_from_text(layout, xs, ys, bbox)
-        if not rows:
-            continue
+            # 过滤：仅 1×1 网格（常见于图框/标题栏矩形）直接跳过
+            if (len(xs) - 1) == 1 and (len(ys) - 1) == 1:
+                if stats:
+                    stats.skip("grid_1x1")
+                continue
 
-        merges, normalized_rows = _apply_merges_for_drawn_table(rows, grid)
+            bbox = _bbox_from_lines(xs, ys)
+            grid = _build_grid(cluster, xs, ys)
+            rows = _fill_cells_from_text(layout, xs, ys, bbox)
+            if not rows:
+                if stats:
+                    stats.skip("no_text_in_grid")
+                continue
 
-        # 过滤：只有 1 个非空单元格的“表格”（容易把图纸总标题误识别成表格）
-        non_empty_cells = sum(1 for row in normalized_rows for cell in row if cell and cell.strip())
-        if non_empty_cells < 2:
-            continue
+            merges, normalized_rows = _apply_merges_for_drawn_table(rows, grid)
 
-        title, data_rows, title_row_offset = split_title_and_data(normalized_rows, layout_name, next_index)
-        adj_merges = _shift_merges_row(merges, -title_row_offset)
+            # 过滤：只有 1 个非空单元格的“表格”（容易把图纸总标题误识别成表格）
+            non_empty_cells = sum(1 for row in normalized_rows for cell in row if cell and cell.strip())
+            if non_empty_cells < 2:
+                if stats:
+                    stats.skip("only_one_non_empty_cell")
+                continue
 
-        if has_any_content(data_rows):
-            tables.append(TableData(name=title, rows=data_rows, merges=adj_merges))
+            title, data_rows, title_row_offset = split_title_and_data(normalized_rows, layout_name, next_index)
+            adj_merges = _shift_merges_row(merges, -title_row_offset)
 
-        next_index += 1
+            if not has_any_content(data_rows):
+                if stats:
+                    stats.skip("empty_table")
+            else:
+                tables.append(TableData(name=title, rows=data_rows, merges=adj_merges))
+                if stats:
+                    stats.drawn_table_exported += 1
+
+            next_index += 1
+        except Exception as exc:  # noqa: BLE001
+            raise ParseContextError(
+                "drawn_table_parse_failed",
+                file_path=file_path,
+                layout_name=layout_name,
+                bbox=bbox if "bbox" in locals() else None,
+                grid_size=((len(ys) - 1), (len(xs) - 1)) if "xs" in locals() and "ys" in locals() else None,
+            ) from exc
 
     return tables
 
