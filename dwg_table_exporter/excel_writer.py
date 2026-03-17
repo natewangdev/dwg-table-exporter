@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable
 
 from openpyxl import Workbook
+from openpyxl.styles import Alignment
 
 from .dxf_reader import TableData
 
@@ -37,6 +38,20 @@ def tables_to_workbook(tables: Iterable[TableData]) -> Workbook:
         for r_idx, row in enumerate(table.rows, start=1):
             for c_idx, value in enumerate(row, start=1):
                 ws.cell(row=r_idx, column=c_idx, value=value)
+
+        # 应用合并单元格（0-based -> 1-based）
+        for r1, c1, r2, c2 in getattr(table, "merges", []) or []:
+            if r1 == r2 and c1 == c2:
+                continue
+            ws.merge_cells(
+                start_row=r1 + 1,
+                start_column=c1 + 1,
+                end_row=r2 + 1,
+                end_column=c2 + 1,
+            )
+            # 合并单元格的样式以左上角单元格为准，这里将其设置为水平/垂直居中
+            cell = ws.cell(row=r1 + 1, column=c1 + 1)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     # 如果没有任何表格，保留一个空 sheet，避免保存失败
     if not wb.sheetnames:
