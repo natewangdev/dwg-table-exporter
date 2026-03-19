@@ -82,11 +82,7 @@ pip install -r requirements.txt
    conda activate dwg-table-exporter
    cd /d D:\GitHub\dwg-table-exporter
 
-   python main.py ^
-       --dxf-dir C:\Users\Admin\Desktop\dwg ^
-       --output-dir C:\Users\Admin\Desktop\excel_out ^
-       --recursive ^
-       --overwrite
+   python main.py --dxf-dir C:\Users\WangHaij\Desktop\dwg --output-dir C:\Users\WangHaij\Desktop\excel --recursive --overwrite
    ```
 
 参数说明：
