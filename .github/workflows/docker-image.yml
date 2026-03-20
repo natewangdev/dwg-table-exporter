@@ -1,0 +1,37 @@
+# push 到 main 时构建 Docker 镜像并上传可下载的 tar Artifact
+name: Docker image
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t masc-ahu-dwg2excel-api:latest .
+
+      - name: Save image to tar
+        run: |
+          docker save masc-ahu-dwg2excel-api:latest -o masc-ahu-dwg2excel-api.tar
+          ls -lh masc-ahu-dwg2excel-api.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: masc-ahu-dwg2excel-api-docker-${{ github.sha }}
+          path: masc-ahu-dwg2excel-api.tar
+          retention-days: 14
+          if-no-files-found: error
