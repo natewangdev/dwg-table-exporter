@@ -23,7 +23,7 @@ cp -a /usr/bin/ODAFileConverter_27.1.0.0 docker/oda/usr/bin/
 构建镜像：
 
 ```bash
-docker build -t dwg-table-exporter:latest .
+docker build -t masc-ahu-dwg2excel-api:latest .
 ```
 
 （`Dockerfile` 已默认 `ODA_BINARY=usr/bin/ODAFileConverter`、`ODA_BUNDLE=usr/bin/ODAFileConverter_27.1.0.0`，并设置 `LD_LIBRARY_PATH` / `QT_PLUGIN_PATH`。）
@@ -36,7 +36,7 @@ docker build -t dwg-table-exporter:latest .
 docker build \
   --build-arg ODA_BINARY=ODAFileConverter \
   --build-arg ODA_BUNDLE=. \
-  -t dwg-table-exporter:latest .
+  -t masc-ahu-dwg2excel-api:latest .
 ```
 
 （需确保 `.so` 与 `plugins` 仍能被动态链接器/Qt 找到，否则优先采用官方 deb 的 `usr/bin` 布局。）

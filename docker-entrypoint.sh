@@ -10,4 +10,4 @@ unix_exec_path = "${ODAFC_EXEC_PATH}"
 EOF
 fi
 
-exec xvfb-run -a uvicorn dwg_table_exporter.api:app --host 0.0.0.0 --port "${PORT:-8000}"
+exec xvfb-run -a uvicorn masc_ahu_dwg2excel_api.api:app --host 0.0.0.0 --port "${PORT:-8000}"

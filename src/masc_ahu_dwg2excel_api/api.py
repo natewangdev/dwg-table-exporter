@@ -18,7 +18,7 @@ from .reporting import ParseContextError
 
 ALLOWED_SUFFIXES = {".dxf", ".dwg"}
 
-app = FastAPI(title="DWG Table Exporter API", version="1.0.0")
+app = FastAPI(title="masc-ahu-dwg2excel-api", version="1.0.0")
 
 # 便于浏览器本地或其它端口打开测试页时调用 API（生产环境请按需收紧 allow_origins）
 app.add_middleware(
@@ -29,7 +29,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+# 与 api 同包的 static/，支持 pip install 与源码运行
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
 if _STATIC_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=str(_STATIC_DIR), html=True), name="ui")
 
