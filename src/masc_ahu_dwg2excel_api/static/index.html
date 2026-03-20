@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>masc-ahu-dwg2excel-api — API 测试</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4d;
+      --text: #e6edf3;
+      --muted: #8b9cb3;
+      --accent: #3b82f640;
+      --btn: #2563eb;
+      --btn-hover: #1d4ed8;
+      --ok: #22c55e;
+      --err: #ef4444;
+      --warn: #eab308;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+    h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 0.25rem; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input[type="text"],
+    input[type="number"],
+    input[type="file"] {
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    input[type="file"] { padding: 0.45rem; }
+    .row { display: grid; gap: 0.75rem; margin-bottom: 0.75rem; }
+    @media (min-width: 560px) {
+      .row.cols-2 { grid-template-columns: 1fr 1fr; }
+    }
+    .check { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; }
+    .check input { width: auto; }
+    .check label { margin: 0; color: var(--text); }
+    .btns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      padding: 0.55rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      background: var(--btn);
+      color: #fff;
+    }
+    button:hover { background: var(--btn-hover); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    button.secondary { background: var(--border); color: var(--text); }
+    button.secondary:hover { background: #3d4f66; }
+    #log {
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      min-height: 120px;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .log-ok { color: var(--ok); }
+    .log-err { color: var(--err); }
+    .log-warn { color: var(--warn); }
+    .hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>masc-ahu-dwg2excel-api</h1>
+    <p class="sub">调用 <code>POST /export</code>，单文件返回 <code>.xlsx</code>，多文件返回 <code>.zip</code>。</p>
+
+    <section>
+      <label for="baseUrl">API 根地址</label>
+      <input id="baseUrl" type="text" placeholder="http://127.0.0.1:8000" />
+      <p class="hint">若本页由同一服务 <code>/ui</code> 打开，可与当前站点同源；也可填 Docker 映射端口。</p>
+    </section>
+
+    <section>
+      <label for="files">选择文件（可多选，.dwg / .dxf）</label>
+      <input id="files" type="file" accept=".dwg,.dxf" multiple />
+    </section>
+
+    <section>
+      <div class="row cols-2">
+        <div>
+          <label for="minCol">min_col_width</label>
+          <input id="minCol" type="number" value="8" min="0.1" step="0.1" />
+        </div>
+        <div>
+          <label for="maxCol">max_col_width</label>
+          <input id="maxCol" type="number" value="60" min="0.1" step="0.1" />
+        </div>
+      </div>
+      <div class="row cols-2">
+        <div>
+          <label for="rowH">base_row_height</label>
+          <input id="rowH" type="number" value="15" min="0.1" step="0.1" />
+        </div>
+        <div class="check" style="align-self: end;">
+          <input id="autosize" type="checkbox" checked />
+          <label for="autosize">autosize（自动列宽/行高）</label>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="btns">
+        <button type="button" id="btnHealth">健康检查 GET /healthz</button>
+        <button type="button" id="btnExport">导出 POST /export</button>
+        <button type="button" class="secondary" id="btnClear">清空日志</button>
+      </div>
+      <p class="hint" id="status"></p>
+      <div id="log"></div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function base() {
+      let u = $("baseUrl").value.trim();
+      if (!u) {
+        u = window.location.origin;
+        if (u === "null" || !u) u = "http://127.0.0.1:8000";
+      }
+      return u.replace(/\/$/, "");
+    }
+
+    function log(msg, cls) {
+      const el = $("log");
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function setBusy(b) {
+      $("btnHealth").disabled = b;
+      $("btnExport").disabled = b;
+      $("status").textContent = b ? "请求中…" : "";
+    }
+
+    $("btnClear").onclick = () => {
+      $("log").innerHTML = "";
+    };
+
+    if (window.location.port && window.location.pathname.startsWith("/ui")) {
+      $("baseUrl").placeholder = window.location.origin;
+    }
+
+    $("btnHealth").onclick = async () => {
+      setBusy(true);
+      try {
+        const r = await fetch(`${base()}/healthz`, { method: "GET" });
+        const txt = await r.text();
+        log(`GET /healthz → ${r.status} ${r.ok ? "OK" : ""}\n${txt}`, r.ok ? "log-ok" : "log-err");
+      } catch (e) {
+        log(`错误: ${e.message}`, "log-err");
+      }
+      setBusy(false);
+    };
+
+    $("btnExport").onclick = async () => {
+      const inp = $("files");
+      if (!inp.files || inp.files.length === 0) {
+        log("请先选择至少一个 .dwg 或 .dxf 文件。", "log-warn");
+        return;
+      }
+      const fd = new FormData();
+      for (let i = 0; i < inp.files.length; i++) {
+        fd.append("files", inp.files[i], inp.files[i].name);
+      }
+      fd.append("autosize", $("autosize").checked ? "true" : "false");
+      fd.append("min_col_width", String($("minCol").value));
+      fd.append("max_col_width", String($("maxCol").value));
+      fd.append("base_row_height", String($("rowH").value));
+
+      setBusy(true);
+      try {
+        const r = await fetch(`${base()}/export`, { method: "POST", body: fd });
+        const ct = r.headers.get("Content-Type") || "";
+        const cd = r.headers.get("Content-Disposition") || "";
+
+        if (!r.ok) {
+          let detail = await r.text();
+          try {
+            const j = JSON.parse(detail);
+            detail = JSON.stringify(j, null, 2);
+          } catch (_) { /* keep text */ }
+          log(`POST /export → ${r.status}\n${detail}`, "log-err");
+          setBusy(false);
+          return;
+        }
+
+        const blob = await r.blob();
+        let name = "download";
+        const m = /filename\*=UTF-8''([^;\n]+)|filename="([^"]+)"/i.exec(cd);
+        if (m) name = decodeURIComponent(m[1] || m[2] || name);
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        log(`POST /export → ${r.status} 已下载: ${name} (${blob.size} bytes, ${ct})`, "log-ok");
+      } catch (e) {
+        log(`错误: ${e.message}`, "log-err");
+      }
+      setBusy(false);
+    };
+  </script>
+</body>
+</html>

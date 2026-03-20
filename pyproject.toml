@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "masc-ahu-dwg2excel-api"
+version = "1.0.0"
+description = "HTTP API & CLI to export tables from DWG/DXF to Excel"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = []
+keywords = ["dwg", "dxf", "excel", "cad", "fastapi"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "ezdxf>=1.4.0",
+  "openpyxl>=3.0.0",
+  "click>=8.0.0",
+  "fastapi>=0.110.0",
+  "uvicorn[standard]>=0.30.0",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27.0",
+  "pytest>=7.0.0",
+]
+
+[project.scripts]
+masc-ahu-dwg2excel = "masc_ahu_dwg2excel_api.cli:main"
+
+[project.urls]
+Repository = "https://github.com/your-org/masc-ahu-dwg2excel-api"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+masc_ahu_dwg2excel_api = ["static/**/*"]
