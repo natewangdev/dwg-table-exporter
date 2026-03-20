@@ -17,6 +17,7 @@ RUN set -eux; \
         ca-certificates \
         wget \
         xvfb \
+        xauth \
         libx11-6 \
         libxext6 \
         libxrender1 \
