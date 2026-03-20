@@ -194,6 +194,10 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# ODA File Converter（Linux 安装文件，由构建者在本地放入 docker/oda/，勿提交二进制）
+docker/oda/*
+!docker/oda/README.md
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data

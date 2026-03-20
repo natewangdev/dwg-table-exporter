@@ -15,7 +15,8 @@ dwg-table-exporter
 目录结构
 --------
 
-- `main.py`：命令行入口
+- `main.py`：命令行入口（兼容保留）
+- `dwg_table_exporter/api.py`：FastAPI 服务入口（推荐）
 - `dwg_table_exporter/config.py`：导出配置
 - `dwg_table_exporter/dxf_reader.py`：对外门面（查找文件、读取表格）
 - `dwg_table_exporter/io_loader.py`：DWG/DXF 加载（含 ODAFileConverter）
@@ -26,6 +27,8 @@ dwg-table-exporter
 - `dwg_table_exporter/excel_writer.py`：Excel 写入
 - `dwg_table_exporter/pipeline.py`：批量处理流程
 - `requirements.txt`：Python 依赖
+- `docker/oda/`：构建 Docker 镜像时放入 Linux 版 ODA File Converter（见该目录下说明）
+- `static/index.html`：API 测试页（挂载路径 `/ui/`）
 
 环境准备
 --------
@@ -65,8 +68,129 @@ pip install -r requirements.txt
 
 > 如果只处理 DXF 文件，可以不安装 ODA，此时程序会忽略 `.dwg`。
 
-使用方法
---------
+使用方法（API）
+---------------
+
+### 1. 启动 API 服务
+
+```bash
+pip install -r requirements.txt
+uvicorn dwg_table_exporter.api:app --host 0.0.0.0 --port 8000
+```
+
+服务启动后，可访问：
+
+- `http://127.0.0.1:8000/healthz`：健康检查
+- `http://127.0.0.1:8000/docs`：Swagger 文档
+- `http://127.0.0.1:8000/ui/`：简易 Web 测试页（上传 DWG/DXF，下载 Excel / ZIP）
+
+### 2. 调用导出接口
+
+接口：`POST /export`（`multipart/form-data`）
+
+- `files`：一个或多个 `dwg/dxf` 文件（必填）
+- `autosize`：是否自动列宽/行高（默认 `true`）
+- `min_col_width`：最小列宽（默认 `8.0`）
+- `max_col_width`：最大列宽（默认 `60.0`）
+- `base_row_height`：基础行高（默认 `15.0`）
+
+返回：
+
+- 上传 1 个文件：直接返回 1 个 `.xlsx`
+- 上传多个文件：返回 `exported_excels.zip`（包含多个 `.xlsx` 和 `export_report.json`）
+
+示例（Linux/macOS）：
+
+```bash
+curl -X POST "http://127.0.0.1:8000/export" \
+  -F "files=@/path/to/a.dwg" \
+  -F "files=@/path/to/b.dxf" \
+  -F "autosize=true" \
+  -F "min_col_width=8" \
+  -F "max_col_width=60" \
+  -F "base_row_height=15" \
+  -o result.zip
+```
+
+### 3. ODA 可执行路径（DWG 必需）
+
+当处理 `.dwg` 时，必须保证 ODA File Converter 可用，可通过两种方式配置：
+
+1. `ezdxf.ini`：
+
+   ```ini
+   [odafc-addon]
+   win_exec_path = "D:\\Program Files\\ODA\\ODAFileConverter 27.1.0\\ODAFileConverter.exe"
+   unix_exec_path = "/opt/ODA/ODAFileConverter"
+   ```
+
+2. 环境变量（优先）：`ODAFC_EXEC_PATH`
+
+> 若 ODA 不可用，`.dwg` 会返回明确错误；`.dxf` 不受影响。
+
+Docker 运行
+-----------
+
+### 1. 将 ODA File Converter 放入构建上下文
+
+镜像构建时会将 **Linux 版** ODA File Converter 打包进镜像（不再依赖运行时挂载）。
+
+**推荐：与 Debian/Ubuntu 官方 `.deb` 相同的目录结构**（与 `Dockerfile` 默认值一致）。
+
+在已安装 `odafileconverter` 的机器上，于**项目仓库根目录**执行：
+
+```bash
+mkdir -p docker/oda/usr/bin
+cp -a /usr/bin/ODAFileConverter docker/oda/usr/bin/
+cp -a /usr/bin/ODAFileConverter_27.1.0.0 docker/oda/usr/bin/
+```
+
+说明：
+
+- 必须同时包含启动入口 **`ODAFileConverter`** 与 **`ODAFileConverter_<版本>/` 整目录**（内有 `lib/`、`plugins/`、`qt.conf` 等）。
+- 若你本机版本目录不是 `ODAFileConverter_27.1.0.0`，先执行  
+  `dpkg -L odafileconverter | grep ODAFileConverter_` 确认目录名；构建时用  
+  `--build-arg ODA_BUNDLE=usr/bin/ODAFileConverter_x.x.x.x` 指定。
+- 详情见 [docker/oda/README.md](docker/oda/README.md)。
+
+### 2. 构建镜像
+
+默认已设置 `ODA_BINARY=usr/bin/ODAFileConverter`、`ODA_BUNDLE=usr/bin/ODAFileConverter_27.1.0.0`，并配置 `LD_LIBRARY_PATH`、`QT_PLUGIN_PATH`：
+
+```bash
+docker build -t dwg-table-exporter:latest .
+```
+
+版本目录名不同时示例：
+
+```bash
+docker build \
+  --build-arg ODA_BUNDLE=usr/bin/ODAFileConverter_27.1.0.0 \
+  -t dwg-table-exporter:latest .
+```
+
+### 3. 启动容器
+
+```bash
+docker run --rm -p 8000:8000 dwg-table-exporter:latest
+```
+
+可选：运行时覆盖 ODA 可执行路径（一般无需；若改路径，请同步保证 bundle 与库路径仍正确）：
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e ODAFC_EXEC_PATH=/opt/oda/usr/bin/ODAFileConverter \
+  dwg-table-exporter:latest
+```
+
+说明：
+
+- 镜像内包含 API、`xvfb`（无头环境）以及构建时复制的 ODA 程序；`Dockerfile` 会校验可执行文件与 bundle 目录是否存在。
+- `docker/oda` 中的二进制默认不纳入 Git（见 `.gitignore`），由你在本地或 CI 中放入后再构建。
+- 容器启动后可直接调用 `POST /export` 进行导出。
+
+使用方法（命令行，兼容保留）
+--------------------------
 
 ### 基本用法
 
