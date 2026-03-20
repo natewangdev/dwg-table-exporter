@@ -1,144 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, Dict
-import re
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
-import ezdxf
-from ezdxf.addons import odafc
-from ezdxf.entities.acad_table import read_acad_table_content
 from ezdxf.math import Vec3
 
+from .models import TableData
+from .reporting import LayoutStats, ParseContextError
+from .table_filters import has_any_content
+from .text_clean import clean_cell_text
+from .title_rules import split_title_and_data
 
-@dataclass
-class TableData:
-    """一个通用的表格数据结构：名称 + 二维单元格文本."""
-
-    name: str
-    rows: List[List[str]]
-    merges: List[Tuple[int, int, int, int]] = field(default_factory=list)  # 0-based, inclusive
-
-
-def find_dxf_files(dxf_dir: Path, recursive: bool = False) -> Iterable[Path]:
-    """查找目录下的 CAD 文件，支持 .dxf 与 .dwg."""
-    for path in dxf_dir.rglob("*") if recursive else dxf_dir.iterdir():
-        if path.is_file() and path.suffix.lower() in {".dxf", ".dwg"}:
-            yield path
-
-
-def _load_doc(path: Path) -> ezdxf.EzDxfDoc:  # type: ignore[name-defined]
-    """根据扩展名选择合适的加载方式.
-
-    - .dxf: 直接使用 ezdxf.readfile
-    - .dwg: 使用 ezdxf.addons.odafc.readfile（需要安装 ODA File Converter）
-    """
-    suffix = path.suffix.lower()
-    if suffix == ".dxf":
-        return ezdxf.readfile(path)
-    if suffix == ".dwg":
-        return odafc.readfile(path)
-    raise ValueError(f"不支持的文件类型: {suffix}")
-
-
-def read_tables_from_dxf(path: Path) -> List[TableData]:
-    """从单个 CAD 文件中读取表格数据（标准 TABLE + 线段拼表格），支持 DXF 与 DWG."""
-    doc = _load_doc(path)
-
-    tables: List[TableData] = []
-
-    # 遍历所有布局（模型空间 + 纸空间）
-    for layout in doc.layouts:
-        # 在该布局中查找 ACAD_TABLE 实体
-        for acad_table in layout.query("ACAD_TABLE"):
-            raw_content = read_acad_table_content(acad_table)
-            # raw_content 是 list[list[str]]，其中字符串可能包含 MTEXT 格式代码
-
-            cleaned_rows = [[_clean_cell_text(cell) for cell in row] for row in raw_content]
-
-            index = len(tables) + 1
-            title, data_rows = _split_title_and_data(cleaned_rows, layout.name, index)
-            if _has_any_content(data_rows):
-                tables.append(TableData(name=title, rows=data_rows))
-
-        # 如果没有标准 TABLE，也尝试解析“线段+文字”表格
-        drawn_tables = _read_drawn_tables_from_layout(layout, layout_name=layout.name, start_index=len(tables) + 1)
-        tables.extend([t for t in drawn_tables if _has_any_content(t.rows)])
-
-    return tables
-
-
-_MTEXT_FONT_PATTERN = re.compile(r"{\\f[^;]*;")
-_MTEXT_CTRL_PATTERN = re.compile(r"\\[A-Za-z]+(?:[0-9.-]+)?")
-
-
-def _clean_cell_text(value: str) -> str:
-    """去掉 MTEXT 格式控制，只保留可读文本."""
-    if not value:
-        return ""
-
-    text = str(value)
-
-    # 处理换行符
-    text = text.replace("\\P", "\n").replace("\\n", "\n")
-
-    # 去掉字体格式前缀，如 {\fSimSun|b0|i0|c134|p2;
-    text = _MTEXT_FONT_PATTERN.sub("", text)
-
-    # 去掉控制序列，如 \L \l \H1.0; 等
-    text = _MTEXT_CTRL_PATTERN.sub("", text)
-
-    # 去掉多余的大括号
-    text = text.replace("{", "").replace("}", "")
-
-    return text.strip()
-
-
-def _split_title_and_data(rows: List[List[str]], layout_name: str, index: int) -> tuple[str, List[List[str]]]:
-    """从表格内容中拆分“标题行”和“数据行”.
-
-    约定：
-    - 如果第一行有非空单元格，则认为是表格标题，该行不写入 Excel，只用于 sheet 名。
-    - 否则使用布局名+序号作为 sheet 名，整表写入 Excel。
-    """
-    if not rows:
-        return f"{layout_name}_Table{index}", []
-
-    first_row = rows[0]
-    non_empty = [cell.strip() for cell in first_row if cell and cell.strip()]
-
-    # 更保守：只有“首行仅 1 个非空单元格”且下一行更像表头时才认为是标题行
-    if len(non_empty) == 1 and _looks_like_header_row(rows[1] if len(rows) > 1 else []):
-        title = non_empty[0]
-        data_rows = rows[1:]
-    else:
-        title = f"{layout_name}_Table{index}"
-        data_rows = rows
-
-    return title, data_rows
-
-
-def _looks_like_header_row(row: List[str]) -> bool:
-    """判断一行是否更像“表头/字段名行”。
-
-    经验规则：至少 2 个非空单元格（避免把图纸总标题误判为表格标题）。
-    """
-    non_empty = [c.strip() for c in row if c and c.strip()]
-    return len(non_empty) >= 2
-
-
-def _has_any_content(rows: List[List[str]]) -> bool:
-    """判断表格是否有任何非空内容（用于过滤空表）."""
-    for row in rows:
-        for cell in row:
-            if cell and str(cell).strip():
-                return True
-    return False
-
-
-# -----------------------------
-# 线段 + 文字拼表格（网格识别）
-# -----------------------------
 
 _GRID_TOL = 1e-3  # 几何容差（单位：图纸单位）
 _CLUSTER_PAD = 5.0  # 聚类 padding（单位：图纸单位）
@@ -157,7 +29,17 @@ class _Seg:
         return (min(self.x1, self.x2), min(self.y1, self.y2), max(self.x1, self.x2), max(self.y1, self.y2))
 
 
-def _read_drawn_tables_from_layout(layout, layout_name: str, start_index: int) -> List[TableData]:
+@dataclass(frozen=True)
+class _Grid:
+    xs: List[float]
+    ys: List[float]
+    v_present: List[List[bool]]  # v_present[row][k] for boundary at xs[k], between row's y-interval (bottom-up)
+    h_present: List[List[bool]]  # h_present[k][col] for boundary at ys[k], between col's x-interval
+
+
+def read_drawn_tables_from_layout(
+    layout, *, layout_name: str, start_index: int, stats: Optional[LayoutStats] = None, file_path: Optional[str] = None
+) -> List[TableData]:
     segs = _extract_axis_aligned_segments(layout)
     if not segs:
         return []
@@ -167,35 +49,57 @@ def _read_drawn_tables_from_layout(layout, layout_name: str, start_index: int) -
     next_index = start_index
 
     for cluster in clusters:
-        xs, ys = _cluster_grid_lines(cluster)
-        if xs is None or ys is None:
-            continue
+        try:
+            xs, ys = _cluster_grid_lines(cluster)
+            if xs is None or ys is None:
+                continue
 
-        # 过滤：仅 1×1 网格（常见于图框/标题栏矩形）直接跳过
-        if (len(xs) - 1) == 1 and (len(ys) - 1) == 1:
-            continue
+            if stats:
+                stats.drawn_table_candidates += 1
 
-        bbox = _bbox_from_lines(xs, ys)
-        grid = _build_grid(cluster, xs, ys)
-        rows = _fill_cells_from_text(layout, xs, ys, bbox)
-        if not rows:
-            continue
+            # 过滤：仅 1×1 网格（常见于图框/标题栏矩形）直接跳过
+            if (len(xs) - 1) == 1 and (len(ys) - 1) == 1:
+                if stats:
+                    stats.skip("grid_1x1")
+                continue
 
-        merges, normalized_rows = _apply_merges_for_drawn_table(rows, grid)
+            bbox = _bbox_from_lines(xs, ys)
+            grid = _build_grid(cluster, xs, ys)
+            rows = _fill_cells_from_text(layout, xs, ys, bbox)
+            if not rows:
+                if stats:
+                    stats.skip("no_text_in_grid")
+                continue
 
-        # 过滤：只有 1 个非空单元格的“表格”（容易把图纸总标题误识别成表格）
-        non_empty_cells = sum(1 for row in normalized_rows for cell in row if cell and cell.strip())
-        if non_empty_cells < 2:
-            continue
+            merges, normalized_rows = _apply_merges_for_drawn_table(rows, grid)
 
-        title, data_rows, title_row_offset = _split_title_and_data_drawn_with_offset(
-            normalized_rows, layout_name=layout_name, index=next_index
-        )
-        # 如果标题行被剔除，需要同步调整 merge 的行号
-        adj_merges = _shift_merges_row(merges, -title_row_offset)
+            # 过滤：只有 1 个非空单元格的“表格”（容易把图纸总标题误识别成表格）
+            non_empty_cells = sum(1 for row in normalized_rows for cell in row if cell and cell.strip())
+            if non_empty_cells < 2:
+                if stats:
+                    stats.skip("only_one_non_empty_cell")
+                continue
 
-        tables.append(TableData(name=title, rows=data_rows, merges=adj_merges))
-        next_index += 1
+            title, data_rows, title_row_offset = split_title_and_data(normalized_rows, layout_name, next_index)
+            adj_merges = _shift_merges_row(merges, -title_row_offset)
+
+            if not has_any_content(data_rows):
+                if stats:
+                    stats.skip("empty_table")
+            else:
+                tables.append(TableData(name=title, rows=data_rows, merges=adj_merges))
+                if stats:
+                    stats.drawn_table_exported += 1
+
+            next_index += 1
+        except Exception as exc:  # noqa: BLE001
+            raise ParseContextError(
+                "drawn_table_parse_failed",
+                file_path=file_path,
+                layout_name=layout_name,
+                bbox=bbox if "bbox" in locals() else None,
+                grid_size=((len(ys) - 1), (len(xs) - 1)) if "xs" in locals() and "ys" in locals() else None,
+            ) from exc
 
     return tables
 
@@ -318,20 +222,15 @@ def _fill_cells_from_text(
     ys: List[float],
     bbox: Tuple[float, float, float, float],
 ) -> List[List[str]]:
-    # 单元格数量
     col_count = max(0, len(xs) - 1)
     row_count = max(0, len(ys) - 1)
     if col_count == 0 or row_count == 0:
         return []
 
-    # 以“从上到下”为行序
-    rows: List[List[List[Tuple[float, float, str]]]] = [
-        [[[] for _ in range(col_count)] for _ in range(row_count)]
-    ][0]
+    buckets: List[List[List[Tuple[float, float, str]]]] = [[[] for _ in range(col_count)] for _ in range(row_count)]
 
     x1, y1, x2, y2 = bbox
     pad = 1e-2
-    # 查询范围内文字
     for e in layout.query("TEXT MTEXT"):
         p = _text_anchor_point(e)
         if p is None:
@@ -344,26 +243,22 @@ def _fill_cells_from_text(
         if r is None or c is None:
             continue
 
-        txt = _entity_text(e)
-        txt = _clean_cell_text(txt)
+        txt = clean_cell_text(_entity_text(e))
         if not txt:
             continue
 
-        rows[r][c].append((x, y, txt))
+        buckets[r][c].append((x, y, txt))
 
-    # 合并每格内容
     out: List[List[str]] = []
     for r in range(row_count):
         out_row: List[str] = []
         for c in range(col_count):
-            items = rows[r][c]
+            items = buckets[r][c]
             if not items:
                 out_row.append("")
                 continue
-            # 按 y 从高到低、x 从左到右排序，拼接
             items.sort(key=lambda t: (-t[1], t[0]))
-            merged = "\n".join(t[2] for t in items)
-            out_row.append(merged.strip())
+            out_row.append("\n".join(t[2] for t in items).strip())
         out.append(out_row)
 
     return out
@@ -377,7 +272,6 @@ def _text_anchor_point(entity) -> Optional[Vec3]:
 
 
 def _entity_text(entity) -> str:
-    # TEXT: dxf.text; MTEXT: .text（可能含格式）
     if entity.dxftype() == "TEXT":
         return getattr(entity.dxf, "text", "") or ""
     if entity.dxftype() == "MTEXT":
@@ -386,53 +280,25 @@ def _entity_text(entity) -> str:
 
 
 def _locate_cell(x: float, y: float, xs: List[float], ys: List[float]) -> Tuple[Optional[int], Optional[int]]:
-    # 找列：xs 升序
     c = None
     for i in range(len(xs) - 1):
         if xs[i] - _GRID_TOL <= x <= xs[i + 1] + _GRID_TOL:
             c = i
             break
 
-    # 找行：ys 升序，但我们要 top-down
     r = None
     for k in range(len(ys) - 1):
         if ys[k] - _GRID_TOL <= y <= ys[k + 1] + _GRID_TOL:
-            # k=0 表示最底部区间；转换为从上到下
-            r = (len(ys) - 2) - k
+            r = (len(ys) - 2) - k  # bottom-up -> top-down
             break
 
     return r, c
 
 
-def _split_title_and_data_drawn(rows: List[List[str]], layout_name: str, index: int) -> tuple[str, List[List[str]]]:
-    if not rows:
-        return f"{layout_name}_Table{index}", []
-
-    first_row = rows[0]
-    non_empty = [cell.strip() for cell in first_row if cell and cell.strip()]
-
-    # 线段拼表格：通常标题是合并单元格 -> 首行仅 1 个非空
-    if len(non_empty) == 1:
-        return non_empty[0], rows[1:]
-
-    return f"{layout_name}_Table{index}", rows
-
-
-@dataclass(frozen=True)
-class _Grid:
-    xs: List[float]
-    ys: List[float]
-    v_present: List[List[bool]]  # v_present[row][k] for boundary at xs[k], between row's y-interval
-    h_present: List[List[bool]]  # h_present[k][col] for boundary at ys[k], between col's x-interval
-
-
 def _build_grid(cluster: List[_Seg], xs: List[float], ys: List[float]) -> _Grid:
-    # row_count: y-intervals
     row_count = len(ys) - 1
     col_count = len(xs) - 1
-    # v boundaries at each x line index k in [0..len(xs)-1] for each row interval
     v_present = [[False for _ in range(len(xs))] for _ in range(row_count)]
-    # h boundaries at each y line index k in [0..len(ys)-1] for each col interval
     h_present = [[False for _ in range(col_count)] for _ in range(len(ys))]
 
     def near(a: float, b: float, tol: float = 1e-2) -> bool:
@@ -445,7 +311,6 @@ def _build_grid(cluster: List[_Seg], xs: List[float], ys: List[float]) -> _Grid:
 
     for s in cluster:
         if s.orient == "V":
-            # match x index
             k = None
             for i, xv in enumerate(xs):
                 if near(s.x1, xv):
@@ -456,7 +321,6 @@ def _build_grid(cluster: List[_Seg], xs: List[float], ys: List[float]) -> _Grid:
             for r in range(row_count):
                 ylo, yhi = ys[r], ys[r + 1]
                 if covers(s.y1, s.y2, ylo, yhi):
-                    # r is bottom-up; our text rows are top-down, conversion later is handled by merge mapping
                     v_present[r][k] = True
         else:
             k = None
@@ -483,7 +347,6 @@ def _apply_merges_for_drawn_table(
     if row_count == 0 or col_count == 0:
         return [], rows_topdown
 
-    # union-find over cells
     parent = list(range(row_count * col_count))
 
     def idx(r: int, c: int) -> int:
@@ -500,33 +363,25 @@ def _apply_merges_for_drawn_table(
         if ra != rb:
             parent[rb] = ra
 
-    # Determine internal boundary presence per top-down row.
-    # grid.v_present is bottom-up row intervals; convert:
-    # bottom-up r_b = 0 is lowest interval; top-down r_t = row_count-1 - r_b
     def v_boundary_exists(r_t: int, k: int) -> bool:
         r_b = (row_count - 1) - r_t
         return grid.v_present[r_b][k]
 
     def h_boundary_exists(k: int, c: int) -> bool:
-        # k is y line index; presence doesn't depend on row
         return grid.h_present[k][c]
 
-    # Horizontal merges: missing vertical boundary between c and c+1 at xs[c+1]
     for r in range(row_count):
         for c in range(col_count - 1):
             boundary_k = c + 1
             if not v_boundary_exists(r, boundary_k):
                 union(idx(r, c), idx(r, c + 1))
 
-    # Vertical merges: missing horizontal boundary between r and r+1 at some y line.
-    # rows_topdown r=0 is top interval between ys[-2]..ys[-1]; boundary between r and r+1 corresponds to y line at ys[len(ys)-2 - r]
     for r in range(row_count - 1):
-        yline_k = (len(grid.ys) - 2) - r  # between r and r+1
+        yline_k = (len(grid.ys) - 2) - r
         for c in range(col_count):
             if not h_boundary_exists(yline_k, c):
                 union(idx(r, c), idx(r + 1, c))
 
-    # collect components
     comps: Dict[int, List[Tuple[int, int]]] = {}
     for r in range(row_count):
         for c in range(col_count):
@@ -545,7 +400,6 @@ def _apply_merges_for_drawn_table(
         c2 = max(c for _, c in cells)
         merges.append((r1, c1, r2, c2))
 
-        # merge text into top-left cell
         texts: List[str] = []
         for r, c in sorted(cells, key=lambda t: (t[0], t[1])):
             v = normalized[r][c].strip()
@@ -558,18 +412,6 @@ def _apply_merges_for_drawn_table(
     return merges, normalized
 
 
-def _split_title_and_data_drawn_with_offset(
-    rows: List[List[str]], layout_name: str, index: int
-) -> Tuple[str, List[List[str]], int]:
-    if not rows:
-        return f"{layout_name}_Table{index}", [], 0
-    first_row = rows[0]
-    non_empty = [cell.strip() for cell in first_row if cell and cell.strip()]
-    if len(non_empty) == 1 and _looks_like_header_row(rows[1] if len(rows) > 1 else []):
-        return non_empty[0], rows[1:], 1
-    return f"{layout_name}_Table{index}", rows, 0
-
-
 def _shift_merges_row(merges: List[Tuple[int, int, int, int]], delta: int) -> List[Tuple[int, int, int, int]]:
     if delta == 0:
         return merges
@@ -577,7 +419,6 @@ def _shift_merges_row(merges: List[Tuple[int, int, int, int]], delta: int) -> Li
     for r1, c1, r2, c2 in merges:
         nr1 = r1 + delta
         nr2 = r2 + delta
-        # 标题行剔除后，可能有 merge 落在负行号，直接丢弃
         if nr2 < 0:
             continue
         nr1 = max(nr1, 0)

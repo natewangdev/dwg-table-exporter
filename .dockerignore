@@ -1,0 +1,13 @@
+.git
+.cursor
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.xlsx
+*.zip
+.venv
+venv
+dist
+build
