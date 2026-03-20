@@ -19,9 +19,9 @@ masc-ahu-dwg2excel-api
 .
 ├── pyproject.toml          # 项目元数据与依赖（包名 masc-ahu-dwg2excel-api）
 ├── requirements.txt        # 与 pyproject 对齐的运行依赖（便于 Docker/CI）
-├── Dockerfile
+├── Dockerfile              # 构建时下载并安装 ODA File Converter .deb
 ├── docker-entrypoint.sh
-├── docker/oda/             # 构建镜像前放入 ODA（见该目录说明，通常不提交二进制）
+├── .github/workflows/      # CI：main 推送构建镜像并上传 Artifact
 ├── src/masc_ahu_dwg2excel_api/
 │   ├── api.py              # FastAPI 应用（/export、/healthz、/ui）
 │   ├── cli.py              # Click 命令行入口
@@ -151,7 +151,7 @@ curl -X POST "http://127.0.0.1:8000/export" \
    ```ini
    [odafc-addon]
    win_exec_path = "D:\\Program Files\\ODA\\ODAFileConverter 27.1.0\\ODAFileConverter.exe"
-   unix_exec_path = "/opt/oda/usr/bin/ODAFileConverter"
+   unix_exec_path = "/usr/bin/ODAFileConverter"
    ```
 
 2. 环境变量（优先）：`ODAFC_EXEC_PATH`
@@ -161,63 +161,58 @@ curl -X POST "http://127.0.0.1:8000/export" \
 Docker 运行
 -----------
 
-### 1. 将 ODA File Converter 放入构建上下文
+### 1. 构建镜像
 
-镜像构建时会将 **Linux 版** ODA File Converter 打包进镜像（不再依赖运行时挂载）。
-
-**推荐：与 Debian/Ubuntu 官方 `.deb` 相同的目录结构**（与 `Dockerfile` 默认值一致）。
-
-在已安装 `odafileconverter` 的机器上，于**项目仓库根目录**执行：
-
-```bash
-mkdir -p docker/oda/usr/bin
-cp -a /usr/bin/ODAFileConverter docker/oda/usr/bin/
-cp -a /usr/bin/ODAFileConverter_27.1.0.0 docker/oda/usr/bin/
-```
-
-说明：
-
-- 必须同时包含启动入口 **`ODAFileConverter`** 与 **`ODAFileConverter_<版本>/` 整目录**（内有 `lib/`、`plugins/`、`qt.conf` 等）。
-- 若你本机版本目录不是 `ODAFileConverter_27.1.0.0`，先执行  
-  `dpkg -L odafileconverter | grep ODAFileConverter_` 确认目录名；构建时用  
-  `--build-arg ODA_BUNDLE=usr/bin/ODAFileConverter_x.x.x.x` 指定。
-- 详情见 [docker/oda/README.md](docker/oda/README.md)。
-
-### 2. 构建镜像
-
-默认已设置 `ODA_BINARY=usr/bin/ODAFileConverter`、`ODA_BUNDLE=usr/bin/ODAFileConverter_27.1.0.0`，并配置 `LD_LIBRARY_PATH`、`QT_PLUGIN_PATH`：
+`Dockerfile` 在构建阶段会从 **Open Design Alliance 访客下载页**拉取默认版本的 **Linux `.deb`** 并 `apt` 安装（见文件中 `ODA_DEB_URL`、`ODA_BUNDLE_SUBDIR`）。无需本地 `docker/oda` 目录。
 
 ```bash
 docker build -t masc-ahu-dwg2excel-api:latest .
 ```
 
-版本目录名不同时示例：
+若官方更新安装包地址或版本，可使用构建参数（示例）：
 
 ```bash
 docker build \
-  --build-arg ODA_BUNDLE=usr/bin/ODAFileConverter_27.1.0.0 \
+  --build-arg ODA_DEB_URL="https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_8.3dll_27.1.deb" \
+  --build-arg ODA_BUNDLE_SUBDIR=ODAFileConverter_27.1.0.0 \
   -t masc-ahu-dwg2excel-api:latest .
 ```
 
-### 3. 启动容器
+说明：`ODA_BUNDLE_SUBDIR` 须与 `.deb` 安装后的 **`/usr/bin/ODAFileConverter_<版本>/`** 目录名一致（可在本机安装同款 `.deb` 后执行 `dpkg -L odafileconverter | head` 核对）。
+
+### 2. 启动容器
 
 ```bash
 docker run --rm -p 8000:8000 masc-ahu-dwg2excel-api:latest
 ```
 
-可选：运行时覆盖 ODA 可执行路径（一般无需；若改路径，请同步保证 bundle 与库路径仍正确）：
+镜像内已设置 `ODAFC_EXEC_PATH=/usr/bin/ODAFileConverter` 及 Qt 插件路径。若需覆盖：
 
 ```bash
 docker run --rm -p 8000:8000 \
-  -e ODAFC_EXEC_PATH=/opt/oda/usr/bin/ODAFileConverter \
+  -e ODAFC_EXEC_PATH=/usr/bin/ODAFileConverter \
   masc-ahu-dwg2excel-api:latest
+```
+
+### 3. GitHub Actions 与镜像 Artifact
+
+向 **`main`** 分支推送代码时，工作流 [.github/workflows/docker-image.yml](.github/workflows/docker-image.yml) 会：
+
+1. 构建 Docker 镜像  
+2. 执行 `docker save` 生成 **`masc-ahu-dwg2excel-api.tar`**  
+3. 将 tar 作为 **Artifact** 上传（保留 14 天）
+
+在仓库 **Actions** 标签页打开对应运行结果，在页面底部 **Artifacts** 中即可下载该 tar。本地加载：
+
+```bash
+docker load -i masc-ahu-dwg2excel-api.tar
+docker run --rm -p 8000:8000 masc-ahu-dwg2excel-api:latest
 ```
 
 说明：
 
-- 镜像内通过 `pip install .` 安装 `masc_ahu_dwg2excel_api`，入口为 `uvicorn masc_ahu_dwg2excel_api.api:app`。
-- 镜像包含 `xvfb`（无头环境）与打包的 ODA 程序；`Dockerfile` 会校验可执行文件与 bundle 目录。
-- `docker/oda` 中的二进制默认不纳入 Git（见 `.gitignore`）。
+- 镜像内通过 `pip install .` 安装应用，入口为 `uvicorn masc_ahu_dwg2excel_api.api:app`。
+- 访客下载 URL 若变更导致构建失败，请按需更新 `Dockerfile` 中的默认 `ODA_DEB_URL` 或使用上述 `build-arg`。
 
 使用方法（命令行）
 ------------------
