@@ -10,4 +10,13 @@ unix_exec_path = "${ODAFC_EXEC_PATH}"
 EOF
 fi
 
-exec xvfb-run -a uvicorn masc_ahu_dwg2excel_api.api:app --host 0.0.0.0 --port "${PORT:-8000}"
+PORT="${PORT:-8000}"
+# 立即输出一行，便于 docker logs 确认脚本已执行（避免误以为“无日志”）
+echo "[entrypoint] Starting API on 0.0.0.0:${PORT} (PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-})"
+
+# python -u：无缓冲 stdout/stderr；--access-log：请求日志写入 Docker 日志
+exec xvfb-run -a python -u -m uvicorn masc_ahu_dwg2excel_api.api:app \
+  --host 0.0.0.0 \
+  --port "$PORT" \
+  --log-level info \
+  --access-log
