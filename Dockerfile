@@ -25,6 +25,7 @@ RUN set -eux; \
         libxtst6 \
         libgl1 \
         libglib2.0-0 \
+        libxkbcommon0 \
     ; \
     wget -qO /tmp/odafileconverter.deb "${ODA_DEB_URL}"; \
     apt-get install -y --no-install-recommends /tmp/odafileconverter.deb; \
