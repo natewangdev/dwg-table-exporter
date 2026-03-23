@@ -13,6 +13,10 @@ fi
 PORT="${PORT:-8077}"
 echo "[entrypoint] Starting API on 0.0.0.0:${PORT} (PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-})"
 
+# Qt 运行时目录（ODA File Converter 需要）
+export XDG_RUNTIME_DIR=/tmp/runtime-root
+mkdir -p "$XDG_RUNTIME_DIR"
+
 # Xvfb 虚拟显示（ODA File Converter 是 Qt GUI，需要 DISPLAY）
 # 不使用 xvfb-run：slim 镜像缺少 xdpyinfo，会导致其就绪检测死等
 export DISPLAY=:99
