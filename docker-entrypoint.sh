@@ -10,7 +10,7 @@ unix_exec_path = "${ODAFC_EXEC_PATH}"
 EOF
 fi
 
-PORT="${PORT:-8000}"
+PORT="${PORT:-8077}"
 # 立即输出一行，便于 docker logs 确认脚本已执行（避免误以为“无日志”）
 echo "[entrypoint] Starting API on 0.0.0.0:${PORT} (PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-})"
 
