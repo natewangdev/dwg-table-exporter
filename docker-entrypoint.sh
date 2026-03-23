@@ -10,7 +10,7 @@ unix_exec_path = "${ODAFC_EXEC_PATH}"
 EOF
 fi
 
-PORT="${PORT:-8077}"
+PORT="${PORT:-80}"
 echo "[entrypoint] Starting API on 0.0.0.0:${PORT} (PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-})"
 
 # Qt 运行时目录（ODA File Converter 需要）
