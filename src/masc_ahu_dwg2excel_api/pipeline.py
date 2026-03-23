@@ -36,28 +36,28 @@ def run_pipeline(config: ExportConfig) -> None:
     dxf_files = list(find_dxf_files(config.dxf_dir, recursive=config.recursive))
 
     if not dxf_files:
-        print(f"在目录 {config.dxf_dir} 下没有找到 DXF 文件")
+        print(f"No DXF files found in {config.dxf_dir}")
         return
 
-    print(f"找到 {len(dxf_files)} 个 DXF 文件，开始处理...")
+    print(f"Found {len(dxf_files)} DXF file(s), processing...")
     for dxf_path in dxf_files:
-        print(f"- 处理: {dxf_path.name}")
+        print(f"- Processing: {dxf_path.name}")
         try:
             excel_path = process_single_dxf(config, dxf_path)
         except ParseContextError as exc:
-            print(f"  [失败] {exc}")
+            print(f"  [FAILED] {exc}")
             continue
         except Exception as exc:  # noqa: BLE001
-            print(f"  [失败] file={dxf_path} -> {exc}")
+            print(f"  [FAILED] file={dxf_path} -> {exc}")
             continue
 
         if excel_path is None:
             if config.dry_run:
-                print("  [完成] dry-run：未写出 Excel")
+                print("  [DONE] dry-run: no Excel written")
             else:
-                print("  [跳过] 未找到可导出的表格数据")
+                print("  [SKIP] No exportable table data found")
         else:
-            print(f"  [完成] 导出为 {excel_path.name}")
+            print(f"  [DONE] Exported to {excel_path.name}")
 
 
 def _print_report(report) -> None:
@@ -66,5 +66,4 @@ def _print_report(report) -> None:
     total = report.total_exported
     skipped = report.skipped
     skipped_str = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) if skipped else "none"
-    print(f"  [统计] tables: total={total} acad_table={acad} drawn={drawn}; skipped: {skipped_str}")
-
+    print(f"  [STATS] tables: total={total} acad_table={acad} drawn={drawn}; skipped: {skipped_str}")

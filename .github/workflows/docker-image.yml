@@ -1,4 +1,4 @@
-# push 到 main 时构建 Docker 镜像并上传可下载的 tar Artifact
+# Build Docker image on push to main and upload as downloadable tar Artifact
 name: Docker image
 
 on:

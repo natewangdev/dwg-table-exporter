@@ -28,7 +28,7 @@ def dedupe_sheet_title(title: str, used: set[str], fallback: str) -> str:
 
 
 def _estimate_text_width(value: str) -> int:
-    # 近似：取最长行长度（中文按 1 个字符计，Excel 宽度单位是近似字符宽）
+    """Approximate width by the longest line length (Excel width unit ~ character width)."""
     if value is None:
         return 0
     text = str(value)
@@ -46,7 +46,6 @@ def tables_to_workbook(
     base_row_height: float = 15.0,
 ) -> Workbook:
     wb = Workbook()
-    # 删除默认 sheet
     default_sheet = wb.active
     wb.remove(default_sheet)
 
@@ -60,7 +59,6 @@ def tables_to_workbook(
 
         ws = wb.create_sheet(title=safe_title)
 
-        # 记录每列最大字符数、每行最大行数，用于 autosize
         col_max_chars: list[int] = []
         row_max_lines: list[int] = []
 
@@ -81,7 +79,7 @@ def tables_to_workbook(
                 line_count = max(1, text.count("\n") + 1) if text else 1
                 row_max_lines[r_idx - 1] = max(row_max_lines[r_idx - 1], line_count)
 
-        # 应用合并单元格（0-based -> 1-based）
+        # Apply merged cells (convert 0-based to 1-based)
         for r1, c1, r2, c2 in getattr(table, "merges", []) or []:
             if r1 == r2 and c1 == c2:
                 continue
@@ -91,7 +89,7 @@ def tables_to_workbook(
                 end_row=r2 + 1,
                 end_column=c2 + 1,
             )
-            # 合并区域的样式：居中/换行；边框对区域内所有格都设置一次，Excel 渲染更稳定
+            # Set border on every cell in the merged region for stable Excel rendering
             for rr in range(r1 + 1, r2 + 2):
                 for cc in range(c1 + 1, c2 + 2):
                     mcell = ws.cell(row=rr, column=cc)
@@ -102,19 +100,19 @@ def tables_to_workbook(
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
         if autosize:
-            # 列宽：按每列最长文本估算
+            # Column width: estimated from longest text per column
             for c_idx, max_chars in enumerate(col_max_chars, start=1):
-                # +2 留边；1.2 系数让中文/数字更舒展
+                # +2 padding; 1.2x factor for CJK / mixed content
                 width = float(max_chars) * 1.2 + 2.0
                 width = max(min_col_width, min(max_col_width, width))
                 ws.column_dimensions[get_column_letter(c_idx)].width = width
 
-            # 行高：按换行数估算（仅在 wrap_text 时有意义）
+            # Row height: estimated from line-break count (only meaningful with wrap_text)
             for r_idx, max_lines in enumerate(row_max_lines, start=1):
                 if max_lines > 1:
                     ws.row_dimensions[r_idx].height = base_row_height * float(max_lines)
 
-    # 如果没有任何表格，保留一个空 sheet，避免保存失败
+    # Keep at least one sheet to avoid save failure on empty workbook
     if not wb.sheetnames:
         wb.create_sheet("Empty")
 
@@ -127,8 +125,7 @@ def save_workbook_for_dxf(output_dir: Path, dxf_path: Path, wb: Workbook, overwr
     excel_path = output_dir / excel_name
 
     if excel_path.exists() and not overwrite:
-        raise FileExistsError(f"输出文件已存在: {excel_path}")
+        raise FileExistsError(f"Output file already exists: {excel_path}")
 
     wb.save(excel_path)
     return excel_path
-

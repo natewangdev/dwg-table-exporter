@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# 在未执行 pip install -e . 时，通过 PYTHONPATH 启动 API（仓库根目录下执行）
+# Start API via PYTHONPATH without pip install -e . (run from repo root)
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export PYTHONPATH="$ROOT/src"
 cd "$ROOT" || exit 1

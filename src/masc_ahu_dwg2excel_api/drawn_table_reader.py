@@ -12,8 +12,8 @@ from .text_clean import clean_cell_text
 from .title_rules import split_title_and_data
 
 
-_GRID_TOL = 1e-3  # 几何容差（单位：图纸单位）
-_CLUSTER_PAD = 5.0  # 聚类 padding（单位：图纸单位）
+_GRID_TOL = 1e-3   # Geometric tolerance (drawing units)
+_CLUSTER_PAD = 5.0  # Clustering padding (drawing units)
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ def read_drawn_tables_from_layout(
             if stats:
                 stats.drawn_table_candidates += 1
 
-            # 过滤：仅 1×1 网格（常见于图框/标题栏矩形）直接跳过
+            # Skip 1x1 grids (commonly title-block or border rectangles)
             if (len(xs) - 1) == 1 and (len(ys) - 1) == 1:
                 if stats:
                     stats.skip("grid_1x1")
@@ -73,7 +73,7 @@ def read_drawn_tables_from_layout(
 
             merges, normalized_rows = _apply_merges_for_drawn_table(rows, grid)
 
-            # 过滤：只有 1 个非空单元格的“表格”（容易把图纸总标题误识别成表格）
+            # Skip tables with only one non-empty cell (likely a misdetected drawing title)
             non_empty_cells = sum(1 for row in normalized_rows for cell in row if cell and cell.strip())
             if non_empty_cells < 2:
                 if stats:
@@ -166,7 +166,7 @@ def _cluster_segments(segs: List[_Seg], pad: float) -> List[List[_Seg]]:
         x1, y1, x2, y2 = s.bbox
         bboxes.append((x1 - pad, y1 - pad, x2 + pad, y2 + pad))
 
-    # O(n^2) 简单聚类：通常表格线数量不大
+    # O(n^2) naive clustering; segment count per layout is typically small
     for i in range(n):
         for j in range(i + 1, n):
             if overlap(bboxes[i], bboxes[j]):
@@ -194,7 +194,7 @@ def _cluster_grid_lines(cluster: List[_Seg]) -> Tuple[Optional[List[float]], Opt
     xs_u = _unique_sorted(xs, tol=1e-2)
     ys_u = _unique_sorted(ys, tol=1e-2)
 
-    # 至少需要 2 条竖线 + 2 条横线
+    # Need at least 2 vertical + 2 horizontal lines to form a grid
     if len(xs_u) < 2 or len(ys_u) < 2:
         return None, None
 
@@ -424,4 +424,3 @@ def _shift_merges_row(merges: List[Tuple[int, int, int, int]], delta: int) -> Li
         nr1 = max(nr1, 0)
         out.append((nr1, c1, nr2, c2))
     return out
-

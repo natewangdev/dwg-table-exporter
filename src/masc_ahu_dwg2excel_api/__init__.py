@@ -1,4 +1,4 @@
-"""masc-ahu-dwg2excel-api：DWG/DXF 表格导出为 Excel（库与 HTTP API）。"""
+"""masc-ahu-dwg2excel-api: Export tables from DWG/DXF to Excel (library & HTTP API)."""
 
 __all__ = ["__version__"]
 
