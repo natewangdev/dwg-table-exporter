@@ -11,11 +11,15 @@ EOF
 fi
 
 PORT="${PORT:-8077}"
-# 立即输出一行，便于 docker logs 确认脚本已执行（避免误以为“无日志”）
 echo "[entrypoint] Starting API on 0.0.0.0:${PORT} (PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-})"
 
-# python -u：无缓冲 stdout/stderr；--access-log：请求日志写入 Docker 日志
-exec xvfb-run -a python -u -m uvicorn masc_ahu_dwg2excel_api.api:app \
+# Xvfb 虚拟显示（ODA File Converter 是 Qt GUI，需要 DISPLAY）
+# 不使用 xvfb-run：slim 镜像缺少 xdpyinfo，会导致其就绪检测死等
+export DISPLAY=:99
+Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp &
+sleep 1
+
+exec python -u -m uvicorn masc_ahu_dwg2excel_api.api:app \
   --host 0.0.0.0 \
   --port "$PORT" \
   --log-level info \
