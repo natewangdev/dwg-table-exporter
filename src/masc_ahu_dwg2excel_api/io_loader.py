@@ -9,17 +9,17 @@ from ezdxf.addons import odafc
 
 
 def find_cad_files(root_dir: Path, recursive: bool = False) -> Iterable[Path]:
-    """查找目录下的 CAD 文件，支持 .dxf 与 .dwg."""
+    """Find CAD files (.dxf / .dwg) under the given directory."""
     for path in root_dir.rglob("*") if recursive else root_dir.iterdir():
         if path.is_file() and path.suffix.lower() in {".dxf", ".dwg"}:
             yield path
 
 
 def load_doc(path: Path):
-    """根据扩展名选择合适的加载方式.
+    """Load a CAD document by extension.
 
-    - .dxf: 直接使用 ezdxf.readfile
-    - .dwg: 使用 ezdxf.addons.odafc.readfile（需要安装 ODA File Converter）
+    - .dxf: read directly via ezdxf.readfile
+    - .dwg: convert via ODA File Converter (ezdxf.addons.odafc.readfile)
     """
     suffix = path.suffix.lower()
     if suffix == ".dxf":
@@ -28,16 +28,16 @@ def load_doc(path: Path):
         _apply_odafc_env_override()
         if not odafc.is_installed():
             raise RuntimeError(
-                "检测到 DWG 文件，但 ODA File Converter 未配置或不可用。"
-                "请在 ezdxf.ini 的 [odafc-addon] 中配置 unix_exec_path/win_exec_path，"
-                "或设置环境变量 ODAFC_EXEC_PATH。"
+                "DWG file detected but ODA File Converter is not configured. "
+                "Set unix_exec_path / win_exec_path in ezdxf.ini [odafc-addon], "
+                "or set the ODAFC_EXEC_PATH environment variable."
             )
         return odafc.readfile(path)
-    raise ValueError(f"不支持的文件类型: {suffix}")
+    raise ValueError(f"Unsupported file type: {suffix}")
 
 
 def _apply_odafc_env_override() -> None:
-    """允许通过环境变量覆盖 ODA 可执行路径."""
+    """Override the ODA executable path from the environment variable."""
     exec_path = os.getenv("ODAFC_EXEC_PATH", "").strip()
     if not exec_path:
         return
@@ -45,4 +45,3 @@ def _apply_odafc_env_override() -> None:
         odafc.win_exec_path = exec_path
     else:
         odafc.unix_exec_path = exec_path
-

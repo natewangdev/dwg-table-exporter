@@ -20,7 +20,7 @@ ALLOWED_SUFFIXES = {".dxf", ".dwg"}
 
 app = FastAPI(title="masc-ahu-dwg2excel-api", version="1.0.0")
 
-# 便于浏览器本地或其它端口打开测试页时调用 API（生产环境请按需收紧 allow_origins）
+# Allow all origins for local / cross-port testing; tighten in production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 与 api 同包的 static/，支持 pip install 与源码运行
+# Serve the static/ directory co-located with this package
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 if _STATIC_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=str(_STATIC_DIR), html=True), name="ui")
@@ -42,18 +42,18 @@ def healthz() -> dict[str, str]:
 
 @app.post("/export")
 async def export_tables(
-    files: list[UploadFile] = File(..., description="上传一个或多个 DWG/DXF 文件"),
+    files: list[UploadFile] = File(..., description="Upload one or more DWG/DXF files"),
     autosize: bool = Form(True),
     min_col_width: float = Form(8.0),
     max_col_width: float = Form(60.0),
     base_row_height: float = Form(15.0),
 ) -> Response:
     if not files:
-        raise HTTPException(status_code=400, detail="至少上传一个 DWG 或 DXF 文件。")
+        raise HTTPException(status_code=400, detail="At least one DWG or DXF file is required.")
     if min_col_width <= 0 or max_col_width <= 0 or base_row_height <= 0:
-        raise HTTPException(status_code=400, detail="列宽和行高参数必须大于 0。")
+        raise HTTPException(status_code=400, detail="Column width and row height must be > 0.")
     if min_col_width > max_col_width:
-        raise HTTPException(status_code=400, detail="min_col_width 不能大于 max_col_width。")
+        raise HTTPException(status_code=400, detail="min_col_width must not exceed max_col_width.")
 
     with TemporaryDirectory(prefix="dwg-export-") as tmp_dir:
         tmp_root = Path(tmp_dir)
@@ -68,7 +68,7 @@ async def export_tables(
                     {
                         "file": original_name or "<unknown>",
                         "status": "failed",
-                        "message": f"不支持的文件类型: {suffix or '<none>'}",
+                        "message": f"Unsupported file type: {suffix or '<none>'}",
                     }
                 )
                 continue
@@ -83,7 +83,7 @@ async def export_tables(
             try:
                 tables, report = read_tables_with_report(input_path)
                 if not tables:
-                    results.append({"file": file_name, "status": "failed", "message": "未识别到可导出的表格数据。"})
+                    results.append({"file": file_name, "status": "failed", "message": "No exportable table data found."})
                     continue
 
                 wb = tables_to_workbook(
@@ -116,7 +116,7 @@ async def export_tables(
                 results.append({"file": file_name, "status": "failed", "message": str(exc)})
 
         if not exported:
-            raise HTTPException(status_code=422, detail={"message": "没有成功导出任何文件。", "results": results})
+            raise HTTPException(status_code=422, detail={"message": "No files were exported successfully.", "results": results})
 
         if len(exported) == 1:
             xlsx_name, payload = exported[0]

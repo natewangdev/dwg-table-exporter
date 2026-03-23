@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-# 镜像构建时已设置 ODAFC_EXEC_PATH；运行时也允许通过 -e 覆盖。
+# ODAFC_EXEC_PATH is set at build time; can be overridden at runtime via -e.
 if [ -n "${ODAFC_EXEC_PATH:-}" ]; then
   cat > /app/ezdxf.ini <<EOF
 [odafc-addon]
@@ -13,12 +13,12 @@ fi
 PORT="${PORT:-80}"
 echo "[entrypoint] Starting API on 0.0.0.0:${PORT} (PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-})"
 
-# Qt 运行时目录（ODA File Converter 需要）
+# Qt runtime directory required by ODA File Converter
 export XDG_RUNTIME_DIR=/tmp/runtime-root
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 0700 "$XDG_RUNTIME_DIR"
 
-# Xvfb 虚拟显示（ODA File Converter 是 Qt GUI，需要 DISPLAY）
-# 不使用 xvfb-run：slim 镜像缺少 xdpyinfo，会导致其就绪检测死等
+# Virtual X display for ODA File Converter (Qt GUI that requires DISPLAY).
+# Avoid xvfb-run: slim image lacks xdpyinfo, causing its readiness check to hang.
 export DISPLAY=:99
 Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp &
 sleep 1

@@ -1,4 +1,4 @@
-"""API 冒烟测试。"""
+"""API smoke tests."""
 
 from __future__ import annotations
 

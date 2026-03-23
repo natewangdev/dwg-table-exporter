@@ -1,4 +1,4 @@
-# 在未执行 pip install -e . 时，通过 PYTHONPATH 启动 API（仓库根目录执行）
+# Start API via PYTHONPATH without pip install -e . (run from repo root)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $env:PYTHONPATH = Join-Path $root "src"

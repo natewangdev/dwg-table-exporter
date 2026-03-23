@@ -6,9 +6,9 @@ ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
-# ODA File Converter：构建时下载官方 Linux .deb（版本或 URL 变更时使用 --build-arg）
+# ODA File Converter: download official Linux .deb at build time (use --build-arg to override)
 ARG ODA_DEB_URL="https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_8.3dll_27.1.deb"
-# 与 .deb 安装后的 /usr/bin/ODAFileConverter_<版本> 目录名一致（随 ODA 版本调整）
+# Must match the /usr/bin/ODAFileConverter_<version> directory created by the .deb
 ARG ODA_BUNDLE_SUBDIR=ODAFileConverter_27.1.0.0
 
 RUN set -eux; \
@@ -50,7 +50,7 @@ RUN set -eux; \
     fi; \
     rm -rf /var/lib/apt/lists/*
 
-# 安装路径与官方 .deb 一致（在 /usr/bin 下）
+# Paths matching the official .deb layout under /usr/bin
 ENV ODAFC_EXEC_PATH=/usr/bin/ODAFileConverter \
     ODA_BUNDLE_PATH=/usr/bin/${ODA_BUNDLE_SUBDIR} \
     LD_LIBRARY_PATH=/usr/bin/${ODA_BUNDLE_SUBDIR}/lib:/usr/bin/${ODA_BUNDLE_SUBDIR}:${LD_LIBRARY_PATH} \
