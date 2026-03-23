@@ -166,8 +166,8 @@ Docker 运行
 若你在 **Windows 下的 Debian WSL（WSL2）** 里使用本仓库（未使用 Docker Desktop）：
 
 - 在 Debian 内安装 **Docker Engine**：可与物理机相同按官方文档 *Install Docker Engine on Debian* 配置官方仓库；**快速试用**可用：`sudo apt update && sudo apt install -y docker.io`，再把用户加入 `docker` 组后**重开终端**：`sudo usermod -aG docker "$USER"`。`docker` 命令只在 **WSL（Debian）终端**里使用。
-- **`--network host`** 与 **`-p 8000:8000`** 在 WSL2 下都可用；`docker ps` 在 host 模式下 **PORTS 为空** 正常。
-- **先在同一 WSL 里**执行 `curl -sS http://127.0.0.1:8000/healthz` 确认服务已起来；若在 **Windows 浏览器** 访问，用 `http://localhost:8000` 或 WSL 的 IP（`hostname -I` 取第一个），详见下文「从哪里访问？」。
+- **`--network host`** 与 **`-p 8077:8077`** 在 WSL2 下都可用；`docker ps` 在 host 模式下 **PORTS 为空** 正常。
+- **先在同一 WSL 里**执行 `curl -sS http://127.0.0.1:8077/healthz` 确认服务已起来；若在 **Windows 浏览器** 访问，用 `http://localhost:8077` 或 WSL 的 IP（`hostname -I` 取第一个），详见下文「从哪里访问？」。
 
 ### 1. 构建镜像
 
@@ -195,7 +195,7 @@ docker build \
 **方式 A：端口映射（最简单，推荐）**
 
 ```bash
-docker run --rm --name masc-ahu-dwg2excel-api -p 8000:8000 masc-ahu-dwg2excel-api:latest
+docker run --rm --name masc-ahu-dwg2excel-api -p 8077:8077 masc-ahu-dwg2excel-api:latest
 ```
 
 **方式 B：`--network host`（仅适用于 Linux 内核上的 Docker，例如 WSL2 / 物理 Linux）**
@@ -214,22 +214,22 @@ docker run --rm --network host masc-ahu-dwg2excel-api:latest
 
 | 你在哪操作 | 怎么访问 |
 |------------|----------|
-| 浏览器 / `curl` 在 **同一 WSL 发行版里** | `http://127.0.0.1:8000/docs` |
-| 浏览器在 **Windows**，服务跑在 **WSL 的 Docker** 里 | 先试 `http://localhost:8000/docs`（Win11 常自动转发）；不行则在 WSL 里执行 `hostname -I` 取第一个 IP，在 Windows 浏览器用 `http://<该IP>:8000/docs` |
+| 浏览器 / `curl` 在 **同一 WSL 发行版里** | `http://127.0.0.1:8077/docs` |
+| 浏览器在 **Windows**，服务跑在 **WSL 的 Docker** 里 | 先试 `http://localhost:8077/docs`（Win11 常自动转发）；不行则在 WSL 里执行 `hostname -I` 取第一个 IP，在 Windows 浏览器用 `http://<该IP>:8077/docs` |
 
 ---
 
 **排查：打不开 /docs、`docker logs` 没什么输出**
 
 1. 先看日志是否出现 **`[entrypoint] Starting API on ...`**（已更新镜像/entrypoint 后）；没有则确认用的是新构建的镜像。  
-2. 在 **WSL 终端**（与 `docker` 同一环境）执行：`curl -sS http://127.0.0.1:8000/healthz`。  
-3. 若用方式 A，进容器：`docker exec -it masc-ahu-dwg2excel-api curl -sS http://127.0.0.1:8000/healthz`。  
+2. 在 **WSL 终端**（与 `docker` 同一环境）执行：`curl -sS http://127.0.0.1:8077/healthz`。  
+3. 若用方式 A，进容器：`docker exec -it masc-ahu-dwg2excel-api curl -sS http://127.0.0.1:8077/healthz`。  
 4. 访问 `/docs` 后，`docker logs` 中应有 uvicorn 的 **access** 日志。
 
 镜像内已设置 `ODAFC_EXEC_PATH=/usr/bin/ODAFileConverter` 及 Qt 插件路径。若需覆盖：
 
 ```bash
-docker run --rm -p 8000:8000 \
+docker run --rm -p 8077:8077 \
   -e ODAFC_EXEC_PATH=/usr/bin/ODAFileConverter \
   masc-ahu-dwg2excel-api:latest
 ```
@@ -246,7 +246,7 @@ docker run --rm -p 8000:8000 \
 
 ```bash
 docker load -i masc-ahu-dwg2excel-api.tar
-docker run --rm -p 8000:8000 masc-ahu-dwg2excel-api:latest
+docker run --rm -p 8077:8077 masc-ahu-dwg2excel-api:latest
 ```
 
 说明：
