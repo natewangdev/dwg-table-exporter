@@ -107,7 +107,7 @@ docker build \
 ### 启动容器
 
 ```bash
-docker run --rm -d --name masc-ahu-dwg2excel-api -p 8077:8077 masc-ahu-dwg2excel-api:latest
+docker run --rm -d --name masc-ahu-dwg2excel-api -p 8077:80 masc-ahu-dwg2excel-api:latest
 ```
 
 ## 已知限制
